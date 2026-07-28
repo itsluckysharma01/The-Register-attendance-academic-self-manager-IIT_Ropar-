@@ -1,0 +1,9 @@
+{
+  "name": "The Register — Attendance & Schedule",
+  "short_name": "The Register",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#10141A",
+  "theme_color": "#10141A",
+  "icons": []
+}

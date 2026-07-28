@@ -1,0 +1,63 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --ar-bg: #10141A;
+  --ar-surface: #1A2028;
+  --ar-surface2: #232B35;
+  --ar-border: #2E3742;
+  --ar-ink: #E7EBF0;
+  --ar-muted: #8996A6;
+  --ar-accent: #C99A44;
+  --ar-accent-ink: #2A1F0C;
+  --ar-good: #4F9D69;
+  --ar-good-bg: #16261C;
+  --ar-danger: #C1584B;
+  --ar-danger-bg: #2A1714;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+  background: var(--ar-bg);
+  color: var(--ar-ink);
+  min-height: 100vh;
+}
+.ar-serif { font-family: 'Fraunces', serif; }
+.ar-mono { font-family: 'JetBrains Mono', monospace; }
+.wrap { max-width: 880px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+.header-row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 12px; }
+h1.title { font-size: 26px; font-weight: 600; margin: 0; }
+.subtitle { color: var(--ar-muted); font-size: 13px; margin: 4px 0 0; }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.ar-tab { cursor: pointer; padding: 10px 18px; border-radius: 8px; font-size: 14px; color: var(--ar-muted); border: none; background: transparent; }
+.ar-tab.active { background: var(--ar-surface2); color: var(--ar-ink); }
+.ar-card { background: var(--ar-surface); border: 1px solid var(--ar-border); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.25rem; }
+.ar-btn { cursor: pointer; border: 1px solid var(--ar-border); background: var(--ar-surface2); color: var(--ar-ink); border-radius: 8px; padding: 10px 16px; font-size: 14px; font-weight: 500; transition: all .15s ease; }
+.ar-btn:hover { border-color: var(--ar-muted); }
+.ar-btn:disabled { opacity: .5; cursor: not-allowed; }
+.ar-btn-accent { background: var(--ar-accent); color: var(--ar-accent-ink); border-color: var(--ar-accent); }
+.ar-btn-accent:hover { filter: brightness(1.08); }
+.ar-input, .ar-select { background: var(--ar-surface2); border: 1px solid var(--ar-border); color: var(--ar-ink); border-radius: 8px; padding: 9px 12px; font-size: 14px; font-family: inherit; width: 100%; }
+.ar-input:focus, .ar-select:focus { outline: none; border-color: var(--ar-accent); }
+.stamp-pop { animation: stampAnim .5s cubic-bezier(.34,1.56,.64,1); }
+@keyframes stampAnim { 0% { transform: scale(2.2) rotate(-12deg); opacity: 0; } 60% { transform: scale(0.9) rotate(4deg); opacity: 1; } 100% { transform: scale(1) rotate(-6deg); opacity: 1; } }
+.banner { padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 1.25rem; }
+.stat-card { background: var(--ar-surface); border: 1px solid var(--ar-border); border-radius: 12px; padding: 1rem; }
+.stat-label { color: var(--ar-muted); font-size: 12px; margin: 0 0 6px; }
+.stat-value { font-size: 24px; font-weight: 600; margin: 0; }
+.stamp-btn { border: none; border-radius: 50%; width: 150px; height: 150px; font-size: 16px; font-weight: 600; cursor: pointer; }
+.stamp-marked { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; border: 3px solid var(--ar-good); color: var(--ar-good); border-radius: 50%; width: 150px; height: 150px; justify-content: center; transform: rotate(-6deg); }
+.row-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 4px; border-bottom: 1px solid var(--ar-border); flex-wrap: wrap; gap: 8px; }
+.row-item:last-child { border-bottom: none; }
+.muted-btn { background: none; border: none; color: var(--ar-muted); cursor: pointer; font-size: 12px; }
+input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
+::selection { background: var(--ar-accent); color: var(--ar-accent-ink); }
+
+.auth-shell { max-width: 380px; margin: 10vh auto; }
+.auth-card { background: var(--ar-surface); border: 1px solid var(--ar-border); border-radius: 12px; padding: 2rem; }
+.auth-field { margin-bottom: 14px; }
+.auth-field label { display: block; font-size: 13px; color: var(--ar-muted); margin-bottom: 6px; }
+.auth-error { color: var(--ar-danger); font-size: 13px; margin: 0 0 14px; }
+.auth-switch { text-align: center; margin-top: 16px; font-size: 13px; color: var(--ar-muted); }
+.auth-switch a { color: var(--ar-accent); cursor: pointer; text-decoration: none; }
