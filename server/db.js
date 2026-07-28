@@ -1,4 +1,4 @@
-const { createSqliteStore } = require("./storage/sqlite");
+const { createLocalJsonStore } = require("./storage/local-json");
 
 async function createStore() {
   if (process.env.GOOGLE_SHEET_ID && process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
@@ -6,7 +6,7 @@ async function createStore() {
     return createGoogleSheetsStore();
   }
 
-  return createSqliteStore();
+  return createLocalJsonStore();
 }
 
 module.exports = { createStore };

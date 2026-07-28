@@ -4,8 +4,8 @@ A small account-based attendance and schedule app. The frontend is plain
 HTML/CSS/JS, and the backend is Node.js + Express.
 
 Data can be stored in Google Sheets for easy free deployment. If Google Sheets
-credentials are not configured, the server falls back to local SQLite so you can
-still run the app during development.
+credentials are not configured, the server falls back to a local JSON file so
+you can still run the app during development.
 
 ## Project Structure
 
