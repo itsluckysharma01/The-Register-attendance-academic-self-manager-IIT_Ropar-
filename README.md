@@ -1,29 +1,15 @@
-# The Register - attendance and academic self-manager
+# The Register
 
-A small account-based attendance and schedule app. The frontend is plain
-HTML/CSS/JS, and the backend is Node.js + Express.
+Attendance and schedule manager with a plain HTML/CSS/JS frontend and a Node.js
+Express backend.
 
-Data can be stored in Google Sheets for easy free deployment. If Google Sheets
-credentials are not configured, the server falls back to a local JSON file so
-you can still run the app during development.
+Production data is stored in Google Sheets. If Google credentials are missing,
+the server uses a local `data.json` file for development.
 
-## Project Structure
+## Google Sheets Backend
 
-```text
-the-register-app/
-  public/          Frontend
-  server/          Express API, auth, storage, push notifications
-```
 
-## Google Sheet Backend
-
-The app uses this spreadsheet by default when you set the env vars:
-
-```text
-GOOGLE_SHEET_ID=10bVpeh214Y-ReHvypm6Uya9lX31NnnS9DfklpiHo2Oc
-```
-
-On first start, the server creates or updates these tabs:
+The server creates these tabs automatically:
 
 ```text
 Users
@@ -32,58 +18,28 @@ Todos
 PushSubscriptions
 ```
 
-The sheet is not called directly from the browser. The Express server keeps the
-Google credentials private, handles login safely, and writes to the Sheet through
-the Google Sheets API.
 
-## 1. Prepare Google Access
-
-1. Go to Google Cloud Console and create a project.
-2. Enable **Google Sheets API** for that project.
-3. Create a **Service account**.
-4. Create a JSON key for the service account.
-5. Open your Google Sheet and share it with the service account email as
-   **Editor**.
-
-From the downloaded JSON key, you need:
-
-```text
-client_email      -> GOOGLE_SERVICE_ACCOUNT_EMAIL
-private_key       -> GOOGLE_PRIVATE_KEY
-```
-
-Keep the private key secret. Do not commit it to git.
-
-## 2. Run Locally
+## Local Setup
 
 ```bash
 cd server
 npm install
 copy .env.example .env
+npm start
 ```
 
-Edit `.env`:
 
-```env
-JWT_SECRET=replace-with-a-long-random-string
-TZ=Asia/Kolkata
-GOOGLE_SHEET_ID=10bVpeh214Y-ReHvypm6Uya9lX31NnnS9DfklpiHo2Oc
-GOOGLE_SERVICE_ACCOUNT_EMAIL=your-service-account@your-project.iam.gserviceaccount.com
-GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-```
-
-Generate push notification keys if you want background reminders:
+Optional push notification keys:
 
 ```bash
 npm run generate-vapid
 ```
 
-Then copy `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` into `.env`.
+Add the generated values:
 
-Start the app:
-
-```bash
-npm start
+```env
+VAPID_PUBLIC_KEY=...
+VAPID_PRIVATE_KEY=...
 ```
 
 Open:
@@ -92,34 +48,23 @@ Open:
 http://localhost:3000
 ```
 
-## 3. Deploy For Free
+## Render Deploy
 
-Render is the simplest option for this version because the app still needs a
-small Node server for auth, push reminders, and secure Google Sheets writes.
+Create a Render **Web Service** with:
 
-1. Push this repo to GitHub.
-2. In Render, create a **New Web Service** from the repo.
-3. Set:
-   - Root directory: `server`
-   - Build command: `npm install`
-   - Start command: `npm start`
-4. Add these environment variables:
-   - `JWT_SECRET`
-   - `TZ=Asia/Kolkata`
-   - `GOOGLE_SHEET_ID`
-   - `GOOGLE_SERVICE_ACCOUNT_EMAIL`
-   - `GOOGLE_PRIVATE_KEY`
-   - `VAPID_PUBLIC_KEY` optional
-   - `VAPID_PRIVATE_KEY` optional
-5. Deploy.
+```text
+Root Directory: server
+Build Command: npm install
+Start Command: npm start
+Instance Type: Free
+```
 
-Because the database is Google Sheets, your data survives Render restarts and
-redeploys.
+
+After pushing changes to GitHub, use **Manual Deploy -> Clear build cache &
+deploy** if Render previously failed during `npm install`.
 
 ## Notes
 
-- Passwords are hashed with bcrypt before being stored in the Sheet.
-- Google Sheets is good for a personal/small app, but it is not ideal for heavy
-  multi-user traffic.
-- iOS push notifications require the app to be added to the home screen first
-  on iOS 16.4+.
+- Passwords are hashed before storage.
+- Google Sheets is suitable for a small personal app, not heavy traffic.
+- The backend pins Node to `20.x` for stable Render builds.
