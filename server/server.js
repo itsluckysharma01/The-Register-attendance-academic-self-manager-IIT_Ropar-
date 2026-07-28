@@ -6,7 +6,7 @@ const bcrypt = require("bcryptjs");
 const cron = require("node-cron");
 const path = require("path");
 
-const db = require("./db");
+const { createStore } = require("./db");
 const { signToken, authMiddleware } = require("./auth");
 const webpush = require("./push");
 
@@ -15,35 +15,42 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "..", "public")));
 
+function asyncRoute(handler) {
+  return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
+}
+
+let store;
+
 // ---------- auth ----------
 
-app.post("/api/signup", (req, res) => {
+app.post("/api/signup", asyncRoute(async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password || password.length < 6) {
     return res.status(400).json({ error: "Enter a valid email and a password of at least 6 characters." });
   }
   const normalizedEmail = String(email).toLowerCase().trim();
-  const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(normalizedEmail);
+  const existing = await store.getUserByEmail(normalizedEmail);
   if (existing) {
     return res.status(409).json({ error: "An account with that email already exists." });
   }
   const passwordHash = bcrypt.hashSync(password, 10);
-  const info = db
-    .prepare("INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)")
-    .run(normalizedEmail, passwordHash, new Date().toISOString());
-  const user = { id: info.lastInsertRowid, email: normalizedEmail };
+  const user = await store.createUser({
+    email: normalizedEmail,
+    passwordHash,
+    createdAt: new Date().toISOString(),
+  });
   res.json({ token: signToken(user), email: user.email });
-});
+}));
 
-app.post("/api/login", (req, res) => {
+app.post("/api/login", asyncRoute(async (req, res) => {
   const { email, password } = req.body || {};
   const normalizedEmail = String(email || "").toLowerCase().trim();
-  const user = db.prepare("SELECT * FROM users WHERE email = ?").get(normalizedEmail);
+  const user = await store.getUserByEmail(normalizedEmail);
   if (!user || !bcrypt.compareSync(password || "", user.password_hash)) {
     return res.status(401).json({ error: "Incorrect email or password." });
   }
   res.json({ token: signToken(user), email: user.email });
-});
+}));
 
 app.get("/api/me", authMiddleware, (req, res) => {
   res.json({ email: req.user.email });
@@ -51,73 +58,72 @@ app.get("/api/me", authMiddleware, (req, res) => {
 
 // ---------- attendance ----------
 
-app.get("/api/attendance", authMiddleware, (req, res) => {
-  const rows = db
-    .prepare("SELECT * FROM attendance WHERE user_id = ? ORDER BY date DESC")
-    .all(req.user.id);
+app.get("/api/attendance", authMiddleware, asyncRoute(async (req, res) => {
+  const rows = await store.listAttendance(req.user.id);
   res.json(rows);
-});
+}));
 
-app.post("/api/attendance", authMiddleware, (req, res) => {
+app.post("/api/attendance", authMiddleware, asyncRoute(async (req, res) => {
   const { date, day, time } = req.body || {};
   if (!date || !day || !time) {
     return res.status(400).json({ error: "Missing date, day, or time." });
   }
-  const existing = db
-    .prepare("SELECT id FROM attendance WHERE user_id = ? AND date = ?")
-    .get(req.user.id, date);
+  const existing = await store.getAttendanceByDate(req.user.id, date);
   if (existing) {
     return res.status(409).json({ error: "Already marked for today." });
   }
   const id = `${date}-${Date.now()}`;
-  db.prepare("INSERT INTO attendance (id, user_id, date, day, time) VALUES (?, ?, ?, ?, ?)").run(
+  const entry = await store.createAttendance({
     id,
-    req.user.id,
+    userId: req.user.id,
     date,
     day,
-    time
-  );
-  res.json({ id, date, day, time });
-});
+    time,
+  });
+  res.json(entry);
+}));
 
-app.delete("/api/attendance/:id", authMiddleware, (req, res) => {
-  db.prepare("DELETE FROM attendance WHERE id = ? AND user_id = ?").run(req.params.id, req.user.id);
+app.delete("/api/attendance/:id", authMiddleware, asyncRoute(async (req, res) => {
+  await store.deleteAttendance(req.params.id, req.user.id);
   res.json({ ok: true });
-});
+}));
 
 // ---------- todos ----------
 
-app.get("/api/todos", authMiddleware, (req, res) => {
-  const rows = db
-    .prepare("SELECT * FROM todos WHERE user_id = ? ORDER BY created_at DESC")
-    .all(req.user.id);
+app.get("/api/todos", authMiddleware, asyncRoute(async (req, res) => {
+  const rows = await store.listTodos(req.user.id);
   res.json(rows);
-});
+}));
 
-app.post("/api/todos", authMiddleware, (req, res) => {
+app.post("/api/todos", authMiddleware, asyncRoute(async (req, res) => {
   const { title, category, dueDate } = req.body || {};
   if (!title || !String(title).trim()) {
     return res.status(400).json({ error: "Task needs a title." });
   }
   const id = `t-${Date.now()}`;
-  db.prepare(
-    "INSERT INTO todos (id, user_id, title, category, due_date, status, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?)"
-  ).run(id, req.user.id, String(title).trim(), category || "Other", dueDate || null, new Date().toISOString());
+  await store.createTodo({
+    id,
+    userId: req.user.id,
+    title: String(title).trim(),
+    category: category || "Other",
+    dueDate: dueDate || null,
+    createdAt: new Date().toISOString(),
+  });
   res.json({ id });
-});
+}));
 
-app.patch("/api/todos/:id", authMiddleware, (req, res) => {
-  const todo = db.prepare("SELECT * FROM todos WHERE id = ? AND user_id = ?").get(req.params.id, req.user.id);
+app.patch("/api/todos/:id", authMiddleware, asyncRoute(async (req, res) => {
+  const todo = await store.getTodo(req.params.id, req.user.id);
   if (!todo) return res.status(404).json({ error: "Task not found." });
   const nextStatus = todo.status === "completed" ? "pending" : "completed";
-  db.prepare("UPDATE todos SET status = ? WHERE id = ?").run(nextStatus, todo.id);
+  await store.updateTodoStatus(todo.id, req.user.id, nextStatus);
   res.json({ status: nextStatus });
-});
+}));
 
-app.delete("/api/todos/:id", authMiddleware, (req, res) => {
-  db.prepare("DELETE FROM todos WHERE id = ? AND user_id = ?").run(req.params.id, req.user.id);
+app.delete("/api/todos/:id", authMiddleware, asyncRoute(async (req, res) => {
+  await store.deleteTodo(req.params.id, req.user.id);
   res.json({ ok: true });
-});
+}));
 
 // ---------- push notifications ----------
 
@@ -125,24 +131,22 @@ app.get("/api/push/vapid-public-key", (req, res) => {
   res.json({ key: process.env.VAPID_PUBLIC_KEY || "" });
 });
 
-app.post("/api/push/subscribe", authMiddleware, (req, res) => {
+app.post("/api/push/subscribe", authMiddleware, asyncRoute(async (req, res) => {
   const subscription = req.body;
   if (!subscription || !subscription.endpoint) {
     return res.status(400).json({ error: "Invalid subscription." });
   }
-  db.prepare(
-    "INSERT OR REPLACE INTO push_subscriptions (user_id, endpoint, subscription) VALUES (?, ?, ?)"
-  ).run(req.user.id, subscription.endpoint, JSON.stringify(subscription));
+  await store.upsertPushSubscription(req.user.id, subscription.endpoint, subscription);
   res.json({ ok: true });
-});
+}));
 
-app.post("/api/push/unsubscribe", authMiddleware, (req, res) => {
+app.post("/api/push/unsubscribe", authMiddleware, asyncRoute(async (req, res) => {
   const { endpoint } = req.body || {};
   if (endpoint) {
-    db.prepare("DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?").run(endpoint, req.user.id);
+    await store.deletePushSubscription(endpoint, req.user.id);
   }
   res.json({ ok: true });
-});
+}));
 
 // ---------- reminder logic ----------
 
@@ -156,17 +160,17 @@ function todayISO() {
 
 async function sendReminders(slot) {
   const today = todayISO();
-  const users = db.prepare("SELECT * FROM users").all();
+  const users = await store.listUsers();
   const body =
     slot === "morning"
       ? "It's past 10 AM and today's attendance isn't marked yet."
       : "It's past 2 PM - last call to mark today's attendance.";
 
   for (const user of users) {
-    const marked = db.prepare("SELECT id FROM attendance WHERE user_id = ? AND date = ?").get(user.id, today);
+    const marked = await store.getAttendanceByDate(user.id, today);
     if (marked) continue;
 
-    const subs = db.prepare("SELECT * FROM push_subscriptions WHERE user_id = ?").all(user.id);
+    const subs = await store.listPushSubscriptions(user.id);
     for (const sub of subs) {
       try {
         await webpush.sendNotification(
@@ -176,7 +180,7 @@ async function sendReminders(slot) {
       } catch (err) {
         // 404/410 means the subscription is dead (browser data cleared, uninstalled, etc.) - clean it up.
         if (err.statusCode === 404 || err.statusCode === 410) {
-          db.prepare("DELETE FROM push_subscriptions WHERE id = ?").run(sub.id);
+          await store.deletePushSubscriptionById(sub.id);
         } else {
           console.error("Push failed for user", user.id, err.message);
         }
@@ -190,4 +194,19 @@ cron.schedule("0 10 * * *", () => sendReminders("morning"));
 cron.schedule("0 14 * * *", () => sendReminders("afternoon"));
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`The Register server running on port ${PORT}`));
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(500).json({ error: "Server error. Check the server logs." });
+});
+
+createStore()
+  .then((createdStore) => {
+    store = createdStore;
+    app.listen(PORT, () => {
+      console.log(`The Register server running on port ${PORT} using ${store.name} storage`);
+    });
+  })
+  .catch((err) => {
+    console.error("Could not start storage backend:", err);
+    process.exit(1);
+  });

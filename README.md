@@ -1,101 +1,125 @@
-# The Register — attendance & academic self-manager
+# The Register - attendance and academic self-manager
 
-A full account-based version: sign up, log in, and your attendance log and
-to-do/schedule list are saved to a real database tied to your account.
-Background push notifications remind you at 10 AM and 2 PM if you haven't
-marked attendance yet — these arrive even if the site isn't open in a tab,
-as long as you've enabled notifications once and your device/browser is on.
+A small account-based attendance and schedule app. The frontend is plain
+HTML/CSS/JS, and the backend is Node.js + Express.
 
-## What's inside
+Data can be stored in Google Sheets for easy free deployment. If Google Sheets
+credentials are not configured, the server falls back to local SQLite so you can
+still run the app during development.
 
-```
+## Project Structure
+
+```text
 the-register-app/
-  server/          Node.js + Express + SQLite backend (auth, data, push)
-  public/          Frontend (plain HTML/CSS/JS, no build step)
+  public/          Frontend
+  server/          Express API, auth, storage, push notifications
 ```
 
-## 1. Run it locally first
+## Google Sheet Backend
 
-You'll need [Node.js](https://nodejs.org) 18 or newer installed.
+The app uses this spreadsheet by default when you set the env vars:
+
+```text
+GOOGLE_SHEET_ID=10bVpeh214Y-ReHvypm6Uya9lX31NnnS9DfklpiHo2Oc
+```
+
+On first start, the server creates or updates these tabs:
+
+```text
+Users
+Attendance
+Todos
+PushSubscriptions
+```
+
+The sheet is not called directly from the browser. The Express server keeps the
+Google credentials private, handles login safely, and writes to the Sheet through
+the Google Sheets API.
+
+## 1. Prepare Google Access
+
+1. Go to Google Cloud Console and create a project.
+2. Enable **Google Sheets API** for that project.
+3. Create a **Service account**.
+4. Create a JSON key for the service account.
+5. Open your Google Sheet and share it with the service account email as
+   **Editor**.
+
+From the downloaded JSON key, you need:
+
+```text
+client_email      -> GOOGLE_SERVICE_ACCOUNT_EMAIL
+private_key       -> GOOGLE_PRIVATE_KEY
+```
+
+Keep the private key secret. Do not commit it to git.
+
+## 2. Run Locally
 
 ```bash
 cd server
 npm install
-cp .env.example .env
+copy .env.example .env
 ```
 
-Open `.env` and:
-1. Set `JWT_SECRET` to a random string. Generate one with:
-   ```bash
-   node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
-   ```
-2. Generate your push notification keys:
-   ```bash
-   npm run generate-vapid
-   ```
-   Copy the two lines it prints (`VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY`) into `.env`.
-3. Set `TZ` to your timezone (e.g. `Asia/Kolkata`) so the 10 AM / 2 PM reminders fire at the right local time.
+Edit `.env`:
 
-Then start the server:
+```env
+JWT_SECRET=replace-with-a-long-random-string
+TZ=Asia/Kolkata
+GOOGLE_SHEET_ID=10bVpeh214Y-ReHvypm6Uya9lX31NnnS9DfklpiHo2Oc
+GOOGLE_SERVICE_ACCOUNT_EMAIL=your-service-account@your-project.iam.gserviceaccount.com
+GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+```
+
+Generate push notification keys if you want background reminders:
+
+```bash
+npm run generate-vapid
+```
+
+Then copy `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` into `.env`.
+
+Start the app:
 
 ```bash
 npm start
 ```
 
-Visit `http://localhost:3000` — sign up, mark attendance, add tasks. Click
-"Enable" on the notifications banner and allow permission when your browser
-asks.
+Open:
 
-## 2. Deploying it for free
+```text
+http://localhost:3000
+```
 
-This app needs a server that stays running (unlike the earlier static
-version), so GitHub Pages/Netlify Drop won't work here. Use one of these
-instead — all have free tiers:
+## 3. Deploy For Free
 
-### Option A: Render.com (easiest)
+Render is the simplest option for this version because the app still needs a
+small Node server for auth, push reminders, and secure Google Sheets writes.
 
-1. Push this whole folder to a GitHub repo.
-2. On [render.com](https://render.com), click **New → Web Service**, connect your repo.
+1. Push this repo to GitHub.
+2. In Render, create a **New Web Service** from the repo.
 3. Set:
-   - **Root directory**: `server`
-   - **Build command**: `npm install`
-   - **Start command**: `npm start`
-4. Under **Environment**, add `JWT_SECRET`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `TZ` (same values as your local `.env`).
-5. Deploy. Render gives you a URL like `the-register.onrender.com`.
+   - Root directory: `server`
+   - Build command: `npm install`
+   - Start command: `npm start`
+4. Add these environment variables:
+   - `JWT_SECRET`
+   - `TZ=Asia/Kolkata`
+   - `GOOGLE_SHEET_ID`
+   - `GOOGLE_SERVICE_ACCOUNT_EMAIL`
+   - `GOOGLE_PRIVATE_KEY`
+   - `VAPID_PUBLIC_KEY` optional
+   - `VAPID_PRIVATE_KEY` optional
+5. Deploy.
 
-**Important caveat**: Render's free tier does not include a persistent
-disk, so the SQLite file resets whenever the service redeploys or restarts
-after sleeping. For a small personal project this is usually fine day-to-day,
-but if you want data to survive redeploys/restarts permanently, either:
-- Add a Render persistent disk (small paid add-on), or
-- Swap SQLite for a free hosted database like [Turso](https://turso.tech) (SQLite-compatible, has a generous free tier) or [Supabase](https://supabase.com) (Postgres, free tier) — ask me and I can wire either one in.
+Because the database is Google Sheets, your data survives Render restarts and
+redeploys.
 
-### Option B: Railway.app
+## Notes
 
-Same steps as Render — connect the repo, set root directory to `server`,
-add the same environment variables. Railway's free trial includes a volume
-you can mount for the SQLite file so it survives restarts.
-
-### Option C: Fly.io
-
-Good if you want a persistent volume on the free allowance. Requires the
-`flyctl` CLI; happy to write the `fly.toml` for you if you go this route.
-
-## 3. Using it day to day
-
-- Visit your deployed URL, sign up once.
-- On your phone, open it in Chrome/Safari and use "Add to Home Screen" so
-  it behaves like an installed app.
-- Tap "Enable" on the notifications banner once — after that, reminders
-  fire automatically at 10 AM and 2 PM server time if attendance isn't
-  marked yet.
-
-## Notes and honest limits
-
-- iOS push notifications require the site to be added to the home screen
-  first (iOS 16.4+); it won't work from a regular Safari tab.
-- If you uninstall/clear browser data, your push subscription is lost and
-  you'll need to hit "Enable" again — your account data is unaffected since
-  it lives in the database, not the browser.
-- Passwords are hashed with bcrypt before storage; nothing is stored in
-  plain text.
+- Passwords are hashed with bcrypt before being stored in the Sheet.
+- Google Sheets is good for a personal/small app, but it is not ideal for heavy
+  multi-user traffic.
+- iOS push notifications require the app to be added to the home screen first
+  on iOS 16.4+.
