@@ -50,6 +50,14 @@ h1.title { font-size: 26px; font-weight: 600; margin: 0; }
 .stamp-marked { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; border: 3px solid var(--ar-good); color: var(--ar-good); border-radius: 50%; width: 150px; height: 150px; justify-content: center; transform: rotate(-6deg); }
 .row-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 4px; border-bottom: 1px solid var(--ar-border); flex-wrap: wrap; gap: 8px; }
 .row-item:last-child { border-bottom: none; }
+.class-form { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.class-form-actions { display: flex; gap: 8px; grid-column: span 2; }
+.class-main { display: flex; flex-direction: column; gap: 3px; min-width: 180px; }
+.class-name { font-size: 14px; font-weight: 600; }
+.class-meta { color: var(--ar-muted); font-size: 12px; }
+.class-side { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.class-time { color: var(--ar-muted); font-size: 12px; }
+.room-pill { background: var(--ar-surface2); border: 1px solid var(--ar-border); border-radius: 999px; color: var(--ar-ink); font-size: 12px; padding: 5px 9px; }
 .muted-btn { background: none; border: none; color: var(--ar-muted); cursor: pointer; font-size: 12px; }
 input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
 ::selection { background: var(--ar-accent); color: var(--ar-accent-ink); }
@@ -61,3 +69,15 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
 .auth-error { color: var(--ar-danger); font-size: 13px; margin: 0 0 14px; }
 .auth-switch { text-align: center; margin-top: 16px; font-size: 13px; color: var(--ar-muted); }
 .auth-switch a { color: var(--ar-accent); cursor: pointer; text-decoration: none; }
+
+@media (max-width: 760px) {
+  .class-form { grid-template-columns: 1fr 1fr; }
+  .class-form-actions { grid-column: 1 / -1; }
+}
+
+@media (max-width: 520px) {
+  .wrap { padding: 1.25rem 0.9rem 3rem; }
+  .ar-tab { padding: 9px 12px; }
+  .class-form { grid-template-columns: 1fr; }
+  .class-side { justify-content: flex-start; }
+}

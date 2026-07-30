@@ -6,6 +6,26 @@ function todayISO(d = new Date()) {
 }
 function formatTime(d){ return d.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"}); }
 function formatDatePretty(iso){ const d = new Date(iso+"T00:00:00"); return d.toLocaleDateString(undefined,{day:"numeric",month:"short",year:"numeric"}); }
+function escapeHtml(value) {
+  return String(value == null ? "" : value).replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[char]));
+}
+function normalizeScheduleEntry(entry) {
+  return {
+    id: entry.id,
+    className: entry.class_name,
+    room: entry.room,
+    day: entry.day,
+    date: entry.date || "",
+    startTime: entry.start_time,
+    endTime: entry.end_time,
+  };
+}
 
 const state = {
   token: localStorage.getItem("register_token") || null,
@@ -17,7 +37,9 @@ const state = {
   stamping: false,
   attendance: [],
   todos: [],
+  classes: [],
   newTodo: { title: "", category: "Class", dueDate: "" },
+  classForm: { id: null, className: "", room: "", day: DAY_NAMES[new Date().getDay()], date: "", startTime: "", endTime: "" },
   pushStatus: "unknown", // unknown | unsupported | default | granted | subscribed | denied
 };
 
@@ -87,9 +109,10 @@ async function enterApp() {
 
 async function loadData() {
   try {
-    const [attendance, todos] = await Promise.all([api("/api/attendance"), api("/api/todos")]);
+    const [attendance, todos, classes] = await Promise.all([api("/api/attendance"), api("/api/todos"), api("/api/classes")]);
     state.attendance = attendance;
     state.todos = todos.map((t) => ({ ...t, dueDate: t.due_date }));
+    state.classes = classes.map(normalizeScheduleEntry);
   } catch (e) {
     if (e.status === 401) logout();
   }
@@ -153,6 +176,57 @@ async function toggleTodo(id) {
 async function deleteTodo(id) {
   await api(`/api/todos/${id}`, { method: "DELETE" });
   state.todos = state.todos.filter((t) => t.id !== id);
+  render();
+}
+
+// ---------- class schedule actions ----------
+function resetClassForm() {
+  state.classForm = { id: null, className: "", room: "", day: DAY_NAMES[new Date().getDay()], date: "", startTime: "", endTime: "" };
+}
+
+async function saveClassSchedule() {
+  const form = state.classForm;
+  if (!form.className.trim() || !form.room.trim() || !form.day || !form.startTime || !form.endTime) {
+    alert("Please add class name, room, day, start time, and end time.");
+    return;
+  }
+  const payload = {
+    className: form.className.trim(),
+    room: form.room.trim(),
+    day: form.day,
+    date: form.date || null,
+    startTime: form.startTime,
+    endTime: form.endTime,
+  };
+  const path = form.id ? `/api/classes/${form.id}` : "/api/classes";
+  const method = form.id ? "PUT" : "POST";
+  const entry = await api(path, { method, body: JSON.stringify(payload) });
+  const normalized = normalizeScheduleEntry(entry);
+  if (form.id) {
+    state.classes = state.classes.map((item) => item.id === form.id ? normalized : item);
+  } else {
+    state.classes.push(normalized);
+  }
+  resetClassForm();
+  render();
+}
+
+function editClassSchedule(id) {
+  const entry = state.classes.find((item) => item.id === id);
+  if (!entry) return;
+  state.classForm = { ...entry };
+  render();
+}
+
+function cancelClassEdit() {
+  resetClassForm();
+  render();
+}
+
+async function deleteClassSchedule(id) {
+  await api(`/api/classes/${id}`, { method: "DELETE" });
+  state.classes = state.classes.filter((item) => item.id !== id);
+  if (state.classForm.id === id) resetClassForm();
   render();
 }
 
@@ -290,6 +364,13 @@ function renderApp() {
   const overdueTodos = state.todos.filter((t) => t.status === "pending" && t.dueDate && t.dueDate < today);
   const completedTodos = state.todos.filter((t) => t.status === "completed");
   const upcoming = [...pendingTodos].sort((a, b) => (a.dueDate || "9999").localeCompare(b.dueDate || "9999")).slice(0, 4);
+  const todayName = DAY_NAMES[new Date().getDay()];
+  const sortedClasses = [...state.classes].sort((a, b) => {
+    const dayCompare = DAY_NAMES.indexOf(a.day) - DAY_NAMES.indexOf(b.day);
+    if (dayCompare !== 0) return dayCompare;
+    return (a.startTime || "").localeCompare(b.startTime || "");
+  });
+  const todaysClasses = sortedClasses.filter((entry) => entry.date === today || (!entry.date && entry.day === todayName));
 
   let html = `
     <div class="header-row">
@@ -349,8 +430,18 @@ function renderApp() {
       <div class="stats-grid">
         <div class="stat-card"><p class="stat-label">Current streak</p><p class="stat-value ar-serif">${streak} ${streak===1?'day':'days'}</p></div>
         <div class="stat-card"><p class="stat-label">This month</p><p class="stat-value ar-serif">${monthEntries.length} days</p></div>
+        <div class="stat-card"><p class="stat-label">Classes today</p><p class="stat-value ar-serif">${todaysClasses.length}</p></div>
         <div class="stat-card"><p class="stat-label">Pending tasks</p><p class="stat-value ar-serif">${pendingTodos.length}</p></div>
         <div class="stat-card"><p class="stat-label">Overdue</p><p class="stat-value ar-serif" style="color:${overdueTodos.length?'var(--ar-danger)':'var(--ar-ink)'}">${overdueTodos.length}</p></div>
+      </div>
+
+      <div class="ar-card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <h3 class="ar-serif" style="font-size:16px; margin:0;">Today's classes</h3>
+          <button class="ar-tab" style="color:var(--ar-accent)" onclick="setTab('schedule')">Edit schedule</button>
+        </div>
+        ${todaysClasses.length===0 ? `<p style="color:var(--ar-muted); font-size:13px; margin:0;">No class schedule saved for today.</p>` :
+          todaysClasses.map(classRow).join("")}
       </div>
 
       <div class="ar-card">
@@ -388,7 +479,32 @@ function renderApp() {
   }
 
   if (state.tab === "schedule") {
+    const form = state.classForm;
     html += `
+      <div class="ar-card">
+        <h3 class="ar-serif" style="font-size:16px; margin:0 0 12px;">${form.id ? "Modify class" : "Add class"}</h3>
+        <div class="class-form">
+          <input class="ar-input" id="className" placeholder="Class name" value="${escapeHtml(form.className)}" />
+          <input class="ar-input" id="classRoom" placeholder="Classroom / room" value="${escapeHtml(form.room)}" />
+          <select class="ar-select" id="classDay">
+            ${DAY_NAMES.map((day) => `<option ${form.day===day?'selected':''}>${day}</option>`).join("")}
+          </select>
+          <input type="date" class="ar-input" id="classDate" value="${escapeHtml(form.date)}" title="Optional one-day date" />
+          <input type="time" class="ar-input" id="classStartTime" value="${escapeHtml(form.startTime)}" />
+          <input type="time" class="ar-input" id="classEndTime" value="${escapeHtml(form.endTime)}" />
+          <div class="class-form-actions">
+            <button class="ar-btn ar-btn-accent" onclick="submitClassSchedule()">${form.id ? "Save changes" : "Add class"}</button>
+            ${form.id ? `<button class="ar-btn" onclick="cancelClassEdit()">Cancel</button>` : ""}
+          </div>
+        </div>
+      </div>
+
+      <div class="ar-card">
+        <h3 class="ar-serif" style="font-size:16px; margin:0 0 12px;">Class timetable (${sortedClasses.length})</h3>
+        ${sortedClasses.length===0 ? `<p style="color:var(--ar-muted); font-size:13px; margin:0;">No classes added yet.</p>` :
+          sortedClasses.map((entry) => classRow(entry, true)).join("")}
+      </div>
+
       <div class="ar-card">
         <h3 class="ar-serif" style="font-size:16px; margin:0 0 12px;">Add a task</h3>
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
@@ -411,7 +527,40 @@ function renderApp() {
   if (state.tab === "schedule") {
     const titleInput = document.getElementById("newTodoTitle");
     titleInput.addEventListener("keydown", (e) => { if (e.key === "Enter") submitNewTodo(); });
+    const classFieldMap = {
+      className: "className",
+      classRoom: "room",
+      classDay: "day",
+      classDate: "date",
+      classStartTime: "startTime",
+      classEndTime: "endTime",
+    };
+    Object.keys(classFieldMap).forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener("input", () => { state.classForm[classFieldMap[id]] = el.value; });
+      el.addEventListener("keydown", (e) => { if (e.key === "Enter") submitClassSchedule(); });
+    });
   }
+}
+
+function classRow(entry, withActions = false) {
+  return `
+    <div class="row-item class-row">
+      <div class="class-main">
+        <span class="class-name">${escapeHtml(entry.className)}</span>
+        <span class="class-meta">${escapeHtml(entry.day)}${entry.date ? ` · ${formatDatePretty(entry.date)}` : ""}</span>
+      </div>
+      <div class="class-side">
+        <span class="room-pill">${escapeHtml(entry.room)}</span>
+        <span class="ar-mono class-time">${escapeHtml(entry.startTime)} - ${escapeHtml(entry.endTime)}</span>
+        ${withActions ? `
+          <button class="muted-btn" onclick="editClassSchedule('${entry.id}')">edit</button>
+          <button class="muted-btn" onclick="deleteClassSchedule('${entry.id}')">delete</button>
+        ` : ""}
+      </div>
+    </div>
+  `;
 }
 
 function todoSection(title, items, color) {
@@ -443,6 +592,16 @@ function submitNewTodo() {
   state.newTodo.category = document.getElementById("newTodoCategory").value;
   state.newTodo.dueDate = document.getElementById("newTodoDue").value;
   addTodo();
+}
+
+function submitClassSchedule() {
+  state.classForm.className = document.getElementById("className").value;
+  state.classForm.room = document.getElementById("classRoom").value;
+  state.classForm.day = document.getElementById("classDay").value;
+  state.classForm.date = document.getElementById("classDate").value;
+  state.classForm.startTime = document.getElementById("classStartTime").value;
+  state.classForm.endTime = document.getElementById("classEndTime").value;
+  saveClassSchedule();
 }
 
 // ---------- boot ----------

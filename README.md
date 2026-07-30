@@ -15,6 +15,7 @@ The server creates these tabs automatically:
 Users
 Attendance
 Todos
+ClassSchedules
 PushSubscriptions
 ```
 
