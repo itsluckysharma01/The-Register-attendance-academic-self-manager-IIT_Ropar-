@@ -5,7 +5,7 @@ const TABLES = {
   },
   attendance: {
     sheet: "Attendance",
-    headers: ["id", "user_id", "date", "day", "time"],
+    headers: ["id", "user_id", "date", "day", "morning_time", "evening_time"],
   },
   todos: {
     sheet: "Todos",
@@ -37,6 +37,14 @@ function normalizePrivateKey(privateKey) {
   return privateKey.replace(/\\n/g, "\n");
 }
 
+function normalizeAttendanceEntry(entry) {
+  return {
+    ...entry,
+    morning_time: entry.morning_time || entry.time || "",
+    evening_time: entry.evening_time || "",
+  };
+}
+
 async function createGoogleSheetsStore() {
   const { google } = require("googleapis");
   const spreadsheetId = process.env.GOOGLE_SHEET_ID;
@@ -54,6 +62,38 @@ async function createGoogleSheetsStore() {
   });
   const sheets = google.sheets({ version: "v4", auth });
 
+  async function getHeaderRow(table) {
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${table.sheet}!1:1`,
+    });
+    return response.data.values && response.data.values[0] ? response.data.values[0] : [];
+  }
+
+  async function ensureHeaders(tableKey) {
+    const table = TABLES[tableKey];
+    const existingHeaders = await getHeaderRow(table);
+    const nextHeaders = table.headers.map((header, index) => {
+      if (tableKey === "attendance" && header === "morning_time" && existingHeaders[index] === "time") {
+        return "morning_time";
+      }
+      return existingHeaders[index] || header;
+    });
+
+    table.headers.forEach((header) => {
+      if (!nextHeaders.includes(header)) nextHeaders.push(header);
+    });
+
+    if (nextHeaders.join("\u0000") !== existingHeaders.join("\u0000")) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `${table.sheet}!A1:${String.fromCharCode(64 + nextHeaders.length)}1`,
+        valueInputOption: "RAW",
+        requestBody: { values: [nextHeaders] },
+      });
+    }
+  }
+
   async function ensureWorkbook() {
     const workbook = await sheets.spreadsheets.get({ spreadsheetId });
     const existingTitles = new Set(workbook.data.sheets.map((sheet) => sheet.properties.title));
@@ -65,16 +105,7 @@ async function createGoogleSheetsStore() {
       await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } });
     }
 
-    await Promise.all(
-      Object.values(TABLES).map((table) =>
-        sheets.spreadsheets.values.update({
-          spreadsheetId,
-          range: `${table.sheet}!A1:${String.fromCharCode(64 + table.headers.length)}1`,
-          valueInputOption: "RAW",
-          requestBody: { values: [table.headers] },
-        })
-      )
-    );
+    await Promise.all(Object.keys(TABLES).map(ensureHeaders));
   }
 
   async function list(tableKey) {
@@ -144,17 +175,40 @@ async function createGoogleSheetsStore() {
     async listAttendance(userId) {
       return (await list("attendance"))
         .filter((entry) => entry.user_id === String(userId))
+        .map(normalizeAttendanceEntry)
         .sort((a, b) => b.date.localeCompare(a.date));
     },
 
     async getAttendanceByDate(userId, date) {
-      return (await list("attendance")).find((entry) => entry.user_id === String(userId) && entry.date === date);
+      const entry = (await list("attendance")).find((entry) => entry.user_id === String(userId) && entry.date === date);
+      return entry ? normalizeAttendanceEntry(entry) : entry;
     },
 
-    async createAttendance({ id, userId, date, day, time }) {
-      const entry = { id, user_id: String(userId), date, day, time };
+    async createAttendance({ id, userId, date, day, slot, time }) {
+      const entry = {
+        id,
+        user_id: String(userId),
+        date,
+        day,
+        morning_time: slot === "morning" ? time : "",
+        evening_time: slot === "evening" ? time : "",
+      };
       await append("attendance", entry);
       return entry;
+    },
+
+    async updateAttendanceSlot(id, userId, slot, time) {
+      const entry = (await list("attendance")).find(
+        (candidate) => candidate.id === id && candidate.user_id === String(userId)
+      );
+      if (!entry) return null;
+      const normalized = normalizeAttendanceEntry(entry);
+      const next = Object.assign({}, normalized, {
+        morning_time: slot === "morning" ? time : normalized.morning_time,
+        evening_time: slot === "evening" ? time : normalized.evening_time,
+      });
+      await update("attendance", entry._rowNumber, next);
+      return next;
     },
 
     async deleteAttendance(id, userId) {

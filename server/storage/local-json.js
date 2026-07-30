@@ -25,6 +25,14 @@ function createLocalJsonStore() {
     return String(rows.reduce((highest, row) => Math.max(highest, Number(row.id) || 0), 0) + 1);
   }
 
+  function normalizeAttendanceEntry(entry) {
+    return {
+      ...entry,
+      morning_time: entry.morning_time || entry.time || "",
+      evening_time: entry.evening_time || "",
+    };
+  }
+
   return {
     name: "local-json",
 
@@ -47,19 +55,40 @@ function createLocalJsonStore() {
     async listAttendance(userId) {
       return readData()
         .attendance.filter((entry) => entry.user_id === String(userId))
+        .map(normalizeAttendanceEntry)
         .sort((a, b) => b.date.localeCompare(a.date));
     },
 
     async getAttendanceByDate(userId, date) {
-      return readData().attendance.find((entry) => entry.user_id === String(userId) && entry.date === date);
+      const entry = readData().attendance.find((entry) => entry.user_id === String(userId) && entry.date === date);
+      return entry ? normalizeAttendanceEntry(entry) : entry;
     },
 
-    async createAttendance({ id, userId, date, day, time }) {
+    async createAttendance({ id, userId, date, day, slot, time }) {
       const data = readData();
-      const entry = { id, user_id: String(userId), date, day, time };
+      const entry = {
+        id,
+        user_id: String(userId),
+        date,
+        day,
+        morning_time: slot === "morning" ? time : "",
+        evening_time: slot === "evening" ? time : "",
+      };
       data.attendance.push(entry);
       writeData(data);
       return entry;
+    },
+
+    async updateAttendanceSlot(id, userId, slot, time) {
+      const data = readData();
+      const entry = data.attendance.find((candidate) => candidate.id === id && candidate.user_id === String(userId));
+      if (!entry) return null;
+      if (!entry.morning_time && entry.time) entry.morning_time = entry.time;
+      if (slot === "morning") entry.morning_time = time;
+      else entry.evening_time = time;
+      delete entry.time;
+      writeData(data);
+      return normalizeAttendanceEntry(entry);
     },
 
     async deleteAttendance(id, userId) {

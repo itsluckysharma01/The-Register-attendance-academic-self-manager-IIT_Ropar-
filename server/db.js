@@ -6,6 +6,12 @@ async function createStore() {
     return createGoogleSheetsStore();
   }
 
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "Google Sheets credentials are required in production. Set GOOGLE_SHEET_ID, GOOGLE_SERVICE_ACCOUNT_EMAIL, and GOOGLE_PRIVATE_KEY so registered users stay permanent."
+    );
+  }
+
   return createLocalJsonStore();
 }
 

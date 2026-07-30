@@ -15,8 +15,25 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "..", "public")));
 
+const ATTENDANCE_WINDOWS = {
+  morning: { label: "Morning", start: "08:00", end: "12:30" },
+  evening: { label: "Evening", start: "16:00", end: "21:30" },
+};
+
 function asyncRoute(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
+}
+
+function minutesFromHHMM(value) {
+  const [hours, minutes] = value.split(":").map(Number);
+  return (hours * 60) + minutes;
+}
+
+function isAttendanceWindowOpen(slot, now = new Date()) {
+  const window = ATTENDANCE_WINDOWS[slot];
+  if (!window) return false;
+  const current = (now.getHours() * 60) + now.getMinutes();
+  return current >= minutesFromHHMM(window.start) && current <= minutesFromHHMM(window.end);
 }
 
 let store;
@@ -64,13 +81,26 @@ app.get("/api/attendance", authMiddleware, asyncRoute(async (req, res) => {
 }));
 
 app.post("/api/attendance", authMiddleware, asyncRoute(async (req, res) => {
-  const { date, day, time } = req.body || {};
-  if (!date || !day || !time) {
-    return res.status(400).json({ error: "Missing date, day, or time." });
+  const { date, day, time, slot } = req.body || {};
+  if (!date || !day || !time || !slot) {
+    return res.status(400).json({ error: "Missing date, day, time, or attendance slot." });
   }
+  if (!["morning", "evening"].includes(slot)) {
+    return res.status(400).json({ error: "Attendance slot must be morning or evening." });
+  }
+  if (!isAttendanceWindowOpen(slot)) {
+    const window = ATTENDANCE_WINDOWS[slot];
+    return res.status(403).json({ error: `${window.label} attendance can be marked from ${window.start} to ${window.end}.` });
+  }
+
   const existing = await store.getAttendanceByDate(req.user.id, date);
+  const slotField = slot === "morning" ? "morning_time" : "evening_time";
   if (existing) {
-    return res.status(409).json({ error: "Already marked for today." });
+    if (existing[slotField]) {
+      return res.status(409).json({ error: `${slot === "morning" ? "Morning" : "Evening"} attendance is already marked for today.` });
+    }
+    const updated = await store.updateAttendanceSlot(existing.id, req.user.id, slot, time);
+    return res.json(updated);
   }
   const id = `${date}-${Date.now()}`;
   const entry = await store.createAttendance({
@@ -78,6 +108,7 @@ app.post("/api/attendance", authMiddleware, asyncRoute(async (req, res) => {
     userId: req.user.id,
     date,
     day,
+    slot,
     time,
   });
   res.json(entry);
@@ -218,12 +249,12 @@ async function sendReminders(slot) {
   const users = await store.listUsers();
   const body =
     slot === "morning"
-      ? "It's past 10 AM and today's attendance isn't marked yet."
-      : "It's past 2 PM - last call to mark today's attendance.";
+      ? "Morning attendance is open until 12:30 PM."
+      : "Evening attendance is open until 9:30 PM.";
 
   for (const user of users) {
     const marked = await store.getAttendanceByDate(user.id, today);
-    if (marked) continue;
+    if (marked && marked[slot === "morning" ? "morning_time" : "evening_time"]) continue;
 
     const subs = await store.listPushSubscriptions(user.id);
     for (const sub of subs) {
@@ -246,7 +277,7 @@ async function sendReminders(slot) {
 
 // Runs in the server's local time - set TZ in .env to your timezone.
 cron.schedule("0 10 * * *", () => sendReminders("morning"));
-cron.schedule("0 14 * * *", () => sendReminders("afternoon"));
+cron.schedule("0 18 * * *", () => sendReminders("evening"));
 
 const PORT = process.env.PORT || 3000;
 app.use((err, req, res, next) => {
