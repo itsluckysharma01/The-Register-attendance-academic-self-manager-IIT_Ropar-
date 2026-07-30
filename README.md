@@ -19,6 +19,19 @@ ClassSchedules
 PushSubscriptions
 ```
 
+Registered users are stored in the `Users` tab with hashed passwords. App updates
+should not delete or recreate that tab; keep the same `GOOGLE_SHEET_ID`,
+`GOOGLE_SERVICE_ACCOUNT_EMAIL`, and `GOOGLE_PRIVATE_KEY` environment variables
+across deployments so credentials remain permanent.
+
+In production, the server requires Google Sheets credentials and will not fall
+back to local `data.json`. This protects registered accounts from being stored
+in temporary server storage after a deploy or code change.
+
+Attendance is stored as one row per day, with separate `morning_time` and
+`evening_time` columns. Morning attendance can be marked from 8:00 AM to
+12:30 PM, and evening attendance can be marked from 4:00 PM to 9:30 PM.
+
 
 ## Local Setup
 

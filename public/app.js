@@ -1,4 +1,8 @@
 const DAY_NAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+const ATTENDANCE_SLOTS = {
+  morning: { label: "Morning", start: "08:00", end: "12:30" },
+  evening: { label: "Evening", start: "16:00", end: "21:30" },
+};
 
 function todayISO(d = new Date()) {
   const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,"0"), day = String(d.getDate()).padStart(2,"0");
@@ -6,6 +10,26 @@ function todayISO(d = new Date()) {
 }
 function formatTime(d){ return d.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"}); }
 function formatDatePretty(iso){ const d = new Date(iso+"T00:00:00"); return d.toLocaleDateString(undefined,{day:"numeric",month:"short",year:"numeric"}); }
+function minutesFromHHMM(value) {
+  const [hours, minutes] = value.split(":").map(Number);
+  return (hours * 60) + minutes;
+}
+function currentMinutes(d = new Date()) {
+  return (d.getHours() * 60) + d.getMinutes();
+}
+function isSlotOpen(slot, d = new Date()) {
+  const window = ATTENDANCE_SLOTS[slot];
+  const now = currentMinutes(d);
+  return now >= minutesFromHHMM(window.start) && now <= minutesFromHHMM(window.end);
+}
+function getSlotTime(entry, slot) {
+  if (!entry) return "";
+  if (slot === "morning") return entry.morning_time || entry.time || "";
+  return entry.evening_time || "";
+}
+function isAttendanceComplete(entry) {
+  return Boolean(getSlotTime(entry, "morning") && getSlotTime(entry, "evening"));
+}
 function escapeHtml(value) {
   return String(value == null ? "" : value).replace(/[&<>"']/g, (char) => ({
     "&": "&amp;",
@@ -119,16 +143,24 @@ async function loadData() {
 }
 
 // ---------- attendance actions ----------
-async function markAttendance() {
+async function markAttendance(slot) {
   const today = todayISO();
-  if (state.attendance.some((a) => a.date === today)) return;
+  if (!ATTENDANCE_SLOTS[slot]) return;
+  if (!isSlotOpen(slot)) {
+    const window = ATTENDANCE_SLOTS[slot];
+    alert(`${window.label} attendance can be marked from ${window.start} to ${window.end}.`);
+    return;
+  }
+  if (getSlotTime(state.attendance.find((a) => a.date === today), slot)) return;
   const now = new Date();
   try {
     const entry = await api("/api/attendance", {
       method: "POST",
-      body: JSON.stringify({ date: today, day: DAY_NAMES[now.getDay()], time: formatTime(now) }),
+      body: JSON.stringify({ date: today, day: DAY_NAMES[now.getDay()], time: formatTime(now), slot }),
     });
-    state.attendance.unshift(entry);
+    const existingIndex = state.attendance.findIndex((a) => a.date === today);
+    if (existingIndex >= 0) state.attendance[existingIndex] = entry;
+    else state.attendance.unshift(entry);
     state.stamping = true;
     state.banner = null;
     render();
@@ -291,12 +323,14 @@ async function enablePush() {
 // ---------- in-app reminder banner (works while the page is open) ----------
 function checkReminderBanner() {
   const today = todayISO();
-  const hour = new Date().getHours();
-  const marked = state.attendance.some((a) => a.date === today);
+  const entry = state.attendance.find((a) => a.date === today);
   state.banner = null;
-  if (!marked) {
-    if (hour >= 14) state.banner = { level: "afternoon", text: "Still not marked today. Last call — mark it now." };
-    else if (hour >= 10) state.banner = { level: "morning", text: "Attendance not marked yet today." };
+  if (isSlotOpen("morning") && !getSlotTime(entry, "morning")) {
+    state.banner = { level: "morning", slot: "morning", text: "Morning attendance is not marked yet." };
+  } else if (isSlotOpen("evening") && !getSlotTime(entry, "evening")) {
+    state.banner = { level: "evening", slot: "evening", text: "Evening attendance is not marked yet." };
+  } else if (entry && !isAttendanceComplete(entry)) {
+    state.banner = { level: "pending", text: "One attendance slot is still not marked for today." };
   }
   render();
 }
@@ -357,8 +391,8 @@ function renderApp() {
   const monthEntries = state.attendance.filter((a) => a.date.startsWith(thisMonth));
 
   let streak = 0;
-  { let cursor = new Date(); if (!todaysEntry) cursor.setDate(cursor.getDate() - 1);
-    while (true) { const iso = todayISO(cursor); if (!state.attendance.some((a) => a.date === iso)) break; streak++; cursor.setDate(cursor.getDate() - 1); } }
+  { let cursor = new Date(); if (!isAttendanceComplete(todaysEntry)) cursor.setDate(cursor.getDate() - 1);
+    while (true) { const iso = todayISO(cursor); const entry = state.attendance.find((a) => a.date === iso); if (!isAttendanceComplete(entry)) break; streak++; cursor.setDate(cursor.getDate() - 1); } }
 
   const pendingTodos = state.todos.filter((t) => t.status === "pending" && (!t.dueDate || t.dueDate >= today));
   const overdueTodos = state.todos.filter((t) => t.status === "pending" && t.dueDate && t.dueDate < today);
@@ -388,18 +422,18 @@ function renderApp() {
   `;
 
   if (state.banner) {
-    const isAfternoon = state.banner.level === "afternoon";
+    const isEvening = state.banner.level === "evening";
     html += `
-      <div class="ar-card banner" style="border-color:${isAfternoon?'var(--ar-danger)':'var(--ar-accent)'}; background:${isAfternoon?'var(--ar-danger-bg)':'var(--ar-surface)'}">
+      <div class="ar-card banner" style="border-color:${isEvening?'var(--ar-danger)':'var(--ar-accent)'}; background:${isEvening?'var(--ar-danger-bg)':'var(--ar-surface)'}">
         <span style="font-size:14px">${state.banner.text}</span>
-        <button class="ar-btn ar-btn-accent" onclick="markAttendance()">Mark now</button>
+        ${state.banner.slot ? `<button class="ar-btn ar-btn-accent" onclick="markAttendance('${state.banner.slot}')">Mark now</button>` : ""}
       </div>`;
   }
 
   if (state.pushStatus === "granted" || state.pushStatus === "default") {
     html += `
       <div class="ar-card banner">
-        <span style="font-size:13px; color:var(--ar-muted)">Turn on background reminders — you'll get a notification at 10 AM and 2 PM even if this site isn't open.</span>
+        <span style="font-size:13px; color:var(--ar-muted)">Turn on background reminders for the morning and evening attendance windows.</span>
         <button class="ar-btn" onclick="enablePush()">Enable</button>
       </div>`;
   } else if (state.pushStatus === "denied") {
@@ -410,21 +444,20 @@ function renderApp() {
   }
 
   if (state.tab === "dashboard") {
+    const morningTime = getSlotTime(todaysEntry, "morning");
+    const eveningTime = getSlotTime(todaysEntry, "evening");
     html += `
-      <div class="ar-card" style="text-align:center; padding:1.75rem;">
-        <p style="color:var(--ar-muted); font-size:13px; margin:0 0 14px; text-transform:uppercase; letter-spacing:0.06em;">Today's attendance</p>
-        ${todaysEntry ? `
-          <div class="${state.stamping?'stamp-pop':''}" style="display:inline-block">
-            <div class="stamp-marked">
-              <span style="font-size:12px; letter-spacing:0.08em; text-transform:uppercase;">Marked</span>
-              <span class="ar-mono" style="font-size:20px; font-weight:500;">${todaysEntry.time}</span>
-              <span style="font-size:11px;">${todaysEntry.day}</span>
-            </div>
-          </div>
-        ` : `
-          <button class="ar-btn-accent stamp-btn" onclick="markAttendance()">Mark attendance</button>
-          <p style="color:var(--ar-muted); font-size:12px; margin-top:14px;">Tap the stamp when you're marked present.</p>
-        `}
+      <div class="ar-card attendance-card">
+        <div class="attendance-heading">
+          <p style="color:var(--ar-muted); font-size:13px; margin:0; text-transform:uppercase; letter-spacing:0.06em;">Today's attendance</p>
+          <span class="attendance-summary ${isAttendanceComplete(todaysEntry) ? "complete" : "missing"}">
+            ${isAttendanceComplete(todaysEntry) ? "Both marked" : "Attendance pending"}
+          </span>
+        </div>
+        <div class="attendance-slots">
+          ${attendanceSlotCard("morning", morningTime)}
+          ${attendanceSlotCard("evening", eveningTime)}
+        </div>
       </div>
 
       <div class="stats-grid">
@@ -463,13 +496,14 @@ function renderApp() {
   if (state.tab === "log") {
     html += `
       <div class="ar-card">
-        <h3 class="ar-serif" style="font-size:16px; margin:0 0 14px;">Attendance history (${state.attendance.length} entries)</h3>
+        <h3 class="ar-serif" style="font-size:16px; margin:0 0 14px;">Attendance history (${state.attendance.length} days)</h3>
         ${sortedAttendance.length===0 ? `<p style="color:var(--ar-muted); font-size:13px;">No attendance marked yet.</p>` :
           sortedAttendance.map((a) => `
             <div class="row-item">
               <div><span style="font-size:14px">${formatDatePretty(a.date)}</span><span style="color:var(--ar-muted); font-size:13px;"> · ${a.day}</span></div>
               <div style="display:flex; align-items:center; gap:14px;">
-                <span class="ar-mono" style="font-size:13px; color:var(--ar-good);">${a.time}</span>
+                <span class="attendance-log-time ${getSlotTime(a, "morning") ? "marked" : "missing"}">Morning: ${getSlotTime(a, "morning") || "Not marked"}</span>
+                <span class="attendance-log-time ${getSlotTime(a, "evening") ? "marked" : "missing"}">Evening: ${getSlotTime(a, "evening") || "Not marked"}</span>
                 <button class="muted-btn" onclick="deleteAttendance('${a.id}')">remove</button>
               </div>
             </div>
@@ -602,6 +636,25 @@ function submitClassSchedule() {
   state.classForm.startTime = document.getElementById("classStartTime").value;
   state.classForm.endTime = document.getElementById("classEndTime").value;
   saveClassSchedule();
+}
+
+function attendanceSlotCard(slot, markedTime) {
+  const window = ATTENDANCE_SLOTS[slot];
+  const open = isSlotOpen(slot);
+  const statusText = markedTime ? `Marked at ${markedTime}` : open ? "Ready to mark" : `Open ${window.start} - ${window.end}`;
+  return `
+    <div class="attendance-slot ${markedTime ? "marked" : "missing"} ${state.stamping && markedTime ? "stamp-pop" : ""}">
+      <div>
+        <span class="attendance-slot-label">${window.label}</span>
+        <span class="attendance-slot-window">${window.start} - ${window.end}</span>
+      </div>
+      <strong class="ar-mono">${markedTime || "Not marked"}</strong>
+      <span class="attendance-slot-status">${statusText}</span>
+      ${markedTime
+        ? `<span class="attendance-done">Marked</span>`
+        : `<button class="ar-btn ar-btn-accent" ${open ? "" : "disabled"} onclick="markAttendance('${slot}')">Mark ${window.label}</button>`}
+    </div>
+  `;
 }
 
 // ---------- boot ----------

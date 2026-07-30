@@ -48,6 +48,22 @@ h1.title { font-size: 26px; font-weight: 600; margin: 0; }
 .stat-value { font-size: 24px; font-weight: 600; margin: 0; }
 .stamp-btn { border: none; border-radius: 50%; width: 150px; height: 150px; font-size: 16px; font-weight: 600; cursor: pointer; }
 .stamp-marked { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; border: 3px solid var(--ar-good); color: var(--ar-good); border-radius: 50%; width: 150px; height: 150px; justify-content: center; transform: rotate(-6deg); }
+.attendance-card { padding: 1.25rem; }
+.attendance-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+.attendance-summary { border: 1px solid var(--ar-border); border-radius: 999px; font-size: 12px; padding: 5px 9px; }
+.attendance-summary.complete { color: var(--ar-good); border-color: var(--ar-good); background: var(--ar-good-bg); }
+.attendance-summary.missing { color: var(--ar-accent); border-color: var(--ar-accent); }
+.attendance-slots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.attendance-slot { border: 1px solid var(--ar-border); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; min-height: 180px; }
+.attendance-slot.marked { border-color: var(--ar-good); background: var(--ar-good-bg); }
+.attendance-slot-label { display: block; color: var(--ar-ink); font-size: 16px; font-weight: 600; }
+.attendance-slot-window { display: block; color: var(--ar-muted); font-size: 12px; margin-top: 3px; }
+.attendance-slot strong { color: var(--ar-ink); font-size: 22px; }
+.attendance-slot-status { color: var(--ar-muted); font-size: 12px; flex: 1; }
+.attendance-done { color: var(--ar-good); font-size: 13px; font-weight: 600; }
+.attendance-log-time { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+.attendance-log-time.marked { color: var(--ar-good); }
+.attendance-log-time.missing { color: var(--ar-danger); }
 .row-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 4px; border-bottom: 1px solid var(--ar-border); flex-wrap: wrap; gap: 8px; }
 .row-item:last-child { border-bottom: none; }
 .class-form { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
@@ -78,6 +94,7 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
 @media (max-width: 520px) {
   .wrap { padding: 1.25rem 0.9rem 3rem; }
   .ar-tab { padding: 9px 12px; }
+  .attendance-slots { grid-template-columns: 1fr; }
   .class-form { grid-template-columns: 1fr; }
   .class-side { justify-content: flex-start; }
 }
