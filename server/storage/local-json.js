@@ -5,6 +5,7 @@ const EMPTY_DATA = {
   users: [],
   attendance: [],
   todos: [],
+  classSchedules: [],
   pushSubscriptions: [],
 };
 
@@ -103,6 +104,56 @@ function createLocalJsonStore() {
     async deleteTodo(id, userId) {
       const data = readData();
       data.todos = data.todos.filter((todo) => !(todo.id === id && todo.user_id === String(userId)));
+      writeData(data);
+    },
+
+    async listClassSchedules(userId) {
+      return readData()
+        .classSchedules.filter((entry) => entry.user_id === String(userId))
+        .sort((a, b) => {
+          const dayCompare = String(a.day || "").localeCompare(String(b.day || ""));
+          if (dayCompare !== 0) return dayCompare;
+          return String(a.start_time || "").localeCompare(String(b.start_time || ""));
+        });
+    },
+
+    async getClassSchedule(id, userId) {
+      return readData().classSchedules.find((entry) => entry.id === id && entry.user_id === String(userId));
+    },
+
+    async createClassSchedule({ id, userId, className, room, day, date, startTime, endTime, createdAt, updatedAt }) {
+      const data = readData();
+      const entry = {
+        id,
+        user_id: String(userId),
+        class_name: className,
+        room,
+        day,
+        date: date || "",
+        start_time: startTime,
+        end_time: endTime,
+        created_at: createdAt,
+        updated_at: updatedAt,
+      };
+      data.classSchedules.push(entry);
+      writeData(data);
+      return entry;
+    },
+
+    async updateClassSchedule(id, userId, changes) {
+      const data = readData();
+      const entry = data.classSchedules.find((candidate) => candidate.id === id && candidate.user_id === String(userId));
+      if (!entry) return null;
+      Object.assign(entry, changes, { updated_at: new Date().toISOString() });
+      writeData(data);
+      return entry;
+    },
+
+    async deleteClassSchedule(id, userId) {
+      const data = readData();
+      data.classSchedules = data.classSchedules.filter(
+        (entry) => !(entry.id === id && entry.user_id === String(userId))
+      );
       writeData(data);
     },
 

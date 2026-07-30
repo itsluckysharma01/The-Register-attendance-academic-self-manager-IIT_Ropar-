@@ -11,6 +11,10 @@ const TABLES = {
     sheet: "Todos",
     headers: ["id", "user_id", "title", "category", "due_date", "status", "created_at"],
   },
+  classSchedules: {
+    sheet: "ClassSchedules",
+    headers: ["id", "user_id", "class_name", "room", "day", "date", "start_time", "end_time", "created_at", "updated_at"],
+  },
   pushSubscriptions: {
     sheet: "PushSubscriptions",
     headers: ["id", "user_id", "endpoint", "subscription"],
@@ -192,6 +196,52 @@ async function createGoogleSheetsStore() {
     async deleteTodo(id, userId) {
       const todo = await this.getTodo(id, userId);
       if (todo) await remove("todos", todo._rowNumber);
+    },
+
+    async listClassSchedules(userId) {
+      return (await list("classSchedules"))
+        .filter((entry) => entry.user_id === String(userId))
+        .sort((a, b) => {
+          const dayCompare = String(a.day || "").localeCompare(String(b.day || ""));
+          if (dayCompare !== 0) return dayCompare;
+          return String(a.start_time || "").localeCompare(String(b.start_time || ""));
+        });
+    },
+
+    async getClassSchedule(id, userId) {
+      return (await list("classSchedules")).find(
+        (entry) => entry.id === id && entry.user_id === String(userId)
+      );
+    },
+
+    async createClassSchedule({ id, userId, className, room, day, date, startTime, endTime, createdAt, updatedAt }) {
+      const entry = {
+        id,
+        user_id: String(userId),
+        class_name: className,
+        room,
+        day,
+        date: date || "",
+        start_time: startTime,
+        end_time: endTime,
+        created_at: createdAt,
+        updated_at: updatedAt,
+      };
+      await append("classSchedules", entry);
+      return entry;
+    },
+
+    async updateClassSchedule(id, userId, changes) {
+      const entry = await this.getClassSchedule(id, userId);
+      if (!entry) return null;
+      const next = Object.assign({}, entry, changes, { updated_at: new Date().toISOString() });
+      await update("classSchedules", entry._rowNumber, next);
+      return next;
+    },
+
+    async deleteClassSchedule(id, userId) {
+      const entry = await this.getClassSchedule(id, userId);
+      if (entry) await remove("classSchedules", entry._rowNumber);
     },
 
     async upsertPushSubscription(userId, endpoint, subscription) {

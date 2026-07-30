@@ -125,6 +125,61 @@ app.delete("/api/todos/:id", authMiddleware, asyncRoute(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// ---------- class schedule ----------
+
+function normalizeClassScheduleInput(body) {
+  const className = String(body.className || "").trim();
+  const room = String(body.room || "").trim();
+  const day = String(body.day || "").trim();
+  const date = body.date ? String(body.date).trim() : "";
+  const startTime = String(body.startTime || "").trim();
+  const endTime = String(body.endTime || "").trim();
+  return { className, room, day, date, startTime, endTime };
+}
+
+app.get("/api/classes", authMiddleware, asyncRoute(async (req, res) => {
+  const rows = await store.listClassSchedules(req.user.id);
+  res.json(rows);
+}));
+
+app.post("/api/classes", authMiddleware, asyncRoute(async (req, res) => {
+  const schedule = normalizeClassScheduleInput(req.body || {});
+  if (!schedule.className || !schedule.room || !schedule.day || !schedule.startTime || !schedule.endTime) {
+    return res.status(400).json({ error: "Class name, room, day, start time, and end time are required." });
+  }
+  const now = new Date().toISOString();
+  const entry = await store.createClassSchedule({
+    id: `c-${Date.now()}`,
+    userId: req.user.id,
+    createdAt: now,
+    updatedAt: now,
+    ...schedule,
+  });
+  res.json(entry);
+}));
+
+app.put("/api/classes/:id", authMiddleware, asyncRoute(async (req, res) => {
+  const schedule = normalizeClassScheduleInput(req.body || {});
+  if (!schedule.className || !schedule.room || !schedule.day || !schedule.startTime || !schedule.endTime) {
+    return res.status(400).json({ error: "Class name, room, day, start time, and end time are required." });
+  }
+  const entry = await store.updateClassSchedule(req.params.id, req.user.id, {
+    class_name: schedule.className,
+    room: schedule.room,
+    day: schedule.day,
+    date: schedule.date,
+    start_time: schedule.startTime,
+    end_time: schedule.endTime,
+  });
+  if (!entry) return res.status(404).json({ error: "Class not found." });
+  res.json(entry);
+}));
+
+app.delete("/api/classes/:id", authMiddleware, asyncRoute(async (req, res) => {
+  await store.deleteClassSchedule(req.params.id, req.user.id);
+  res.json({ ok: true });
+}));
+
 // ---------- push notifications ----------
 
 app.get("/api/push/vapid-public-key", (req, res) => {
