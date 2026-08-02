@@ -1,21 +1,57 @@
-const CACHE_NAME = "the-register-v1";
+const CACHE_NAME = "the-register-v2";
 const ASSETS = ["./index.html", "./manifest.json", "./app.js", "./style.css"];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)));
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)),
+  );
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))))
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)),
+        ),
+      ),
   );
   self.clients.claim();
 });
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
-  event.respondWith(caches.match(event.request).then((cached) => cached || fetch(event.request)));
+
+  const url = new URL(event.request.url);
+
+  if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")) {
+    return;
+  }
+
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match("./index.html")),
+    );
+    return;
+  }
+
+  event.respondWith(
+    caches.match(event.request).then((cached) => {
+      if (cached) return cached;
+      return fetch(event.request)
+        .then((response) => {
+          const clone = response.clone();
+          caches
+            .open(CACHE_NAME)
+            .then((cache) => cache.put(event.request, clone))
+            .catch(() => {});
+          return response;
+        })
+        .catch(() => Response.error());
+    }),
+  );
 });
 
 // This is what makes reminders arrive even when the site isn't open in a
@@ -28,16 +64,20 @@ self.addEventListener("push", (event) => {
   } catch (e) {
     if (event.data) payload.body = event.data.text();
   }
-  event.waitUntil(self.registration.showNotification(payload.title, { body: payload.body }));
+  event.waitUntil(
+    self.registration.showNotification(payload.title, { body: payload.body }),
+  );
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   event.waitUntil(
     self.clients.matchAll({ type: "window" }).then((clientsArr) => {
-      const existing = clientsArr.find((c) => c.url.includes(self.location.origin));
+      const existing = clientsArr.find((c) =>
+        c.url.includes(self.location.origin),
+      );
       if (existing) return existing.focus();
       return self.clients.openWindow("./");
-    })
+    }),
   );
 });
