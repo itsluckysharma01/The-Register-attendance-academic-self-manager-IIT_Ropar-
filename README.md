@@ -79,6 +79,16 @@ Start Command: npm start
 Instance Type: Free
 ```
 
+If you deploy from the repository root instead, use:
+
+```text
+Build Command: npm install
+Start Command: npm start
+```
+
+The root `package.json` now installs the backend dependencies from `server/`
+automatically, so either setup works.
+
 After pushing changes to GitHub, use **Manual Deploy -> Clear build cache &
 deploy** if Render previously failed during `npm install`.
 

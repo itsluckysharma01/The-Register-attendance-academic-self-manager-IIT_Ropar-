@@ -3,7 +3,8 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
-    "start": "cd server && node server.js",
-    "generate-vapid": "cd server && node generate-vapid.js"
+    "postinstall": "npm install --prefix server",
+    "start": "npm start --prefix server",
+    "generate-vapid": "npm run generate-vapid --prefix server"
   }
 }
