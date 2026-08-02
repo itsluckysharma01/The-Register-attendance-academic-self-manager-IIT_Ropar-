@@ -8,7 +8,6 @@ the server uses a local `data.json` file for development.
 
 ## Google Sheets Backend
 
-
 The server creates these tabs automatically:
 
 ```text
@@ -32,7 +31,6 @@ Attendance is stored as one row per day, with separate `morning_time` and
 `evening_time` columns. Morning attendance can be marked from 8:00 AM to
 12:30 PM, and evening attendance can be marked from 4:00 PM to 9:30 PM.
 
-
 ## Local Setup
 
 ```bash
@@ -42,6 +40,14 @@ copy .env.example .env
 npm start
 ```
 
+From the project root you can also run:
+
+```bash
+npm start
+```
+
+That command launches the backend from `server/` using the server's local
+environment file and dependencies.
 
 Optional push notification keys:
 
@@ -72,7 +78,6 @@ Build Command: npm install
 Start Command: npm start
 Instance Type: Free
 ```
-
 
 After pushing changes to GitHub, use **Manual Deploy -> Clear build cache &
 deploy** if Render previously failed during `npm install`.

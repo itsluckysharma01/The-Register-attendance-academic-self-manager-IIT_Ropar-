@@ -1,0 +1,9 @@
+{
+  "name": "the-register-app",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "start": "cd server && node server.js",
+    "generate-vapid": "cd server && node generate-vapid.js"
+  }
+}
